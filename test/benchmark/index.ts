@@ -1,12 +1,12 @@
-import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
-import { mark } from '@paulmillr/jsbt/bench.js';
+import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import bench from '@paulmillr/jsbt/bench.js';
 import * as polka from '@polkadot/util-crypto';
-import { deepStrictEqual } from 'assert';
+import { deepStrictEqual } from 'node:assert';
 import * as sr25519 from '../../index.ts';
 
-async function compare(title, runs, kinds) {
+async function compare(title, kinds) {
   for (let [name, fn] of Object.entries(kinds)) {
-    await mark(`${title} ${name}`, runs, fn);
+    await bench(`${title} ${name}`, fn);
   }
 }
 
@@ -32,7 +32,7 @@ async function compare(title, runs, kinds) {
   deepStrictEqual(pubOther, otherPairPolka.publicKey);
 
   if (BENCH) {
-    await compare('secretFromSeed', 100_000, {
+    await compare('secretFromSeed', {
       wasm: () => polka.sr25519PairFromSeed(selfSeed),
       scure: () => sr25519.secretFromSeed(selfSeed),
     });
@@ -46,7 +46,7 @@ async function compare(title, runs, kinds) {
   deepStrictEqual(sharedPolka2, sharedNoble2);
 
   if (BENCH) {
-    await compare('getSharedSecret', 1_000, {
+    await compare('getSharedSecret', {
       wasm: () => polka.sr25519Agreement(skSelf, pubOther),
       scure: () => sr25519.getSharedSecret(skSelf, pubOther),
     });
@@ -61,7 +61,7 @@ async function compare(title, runs, kinds) {
   deepStrictEqual(hardPolka.publicKey, sr25519.getPublicKey(hardNoble));
 
   if (BENCH) {
-    await compare('HDKD.secretHard', 50_000, {
+    await compare('HDKD.secretHard', {
       wasm: () => polka.sr25519DeriveHard(pair, cc),
       scure: () => sr25519.HDKD.secretHard(skSelf, cc),
     });
@@ -75,7 +75,7 @@ async function compare(title, runs, kinds) {
   deepStrictEqual(softPolka.secretKey.subarray(0, 32), softNobleSecret.subarray(0, 32));
 
   if (BENCH) {
-    await compare('HDKD.secretSoft', 1_000, {
+    await compare('HDKD.secretSoft', {
       wasm: () => polka.sr25519DeriveSoft(pair, cc),
       scure: () => sr25519.HDKD.secretSoft(skSelf, cc),
     });
@@ -102,11 +102,11 @@ async function compare(title, runs, kinds) {
   deepStrictEqual(sr25519.verify(msg, nobleSig, pair.publicKey), true);
 
   if (BENCH) {
-    await compare('sign', 1_000, {
+    await compare('sign', {
       wasm: () => polka.sr25519Sign(msg, pair),
       scure: () => sr25519.sign(pair.secretKey, msg),
     });
-    await compare('verify', 1_000, {
+    await compare('verify', {
       wasm: () => polka.sr25519Verify(msg, nobleSig, pair.publicKey),
       scure: () => sr25519.verify(msg, nobleSig, pair.publicKey),
     });
@@ -121,11 +121,11 @@ async function compare(title, runs, kinds) {
   deepStrictEqual(sr25519.vrf.verify(msg, polkaVrfSig, pair.publicKey), true);
 
   if (BENCH) {
-    await compare('vrfSign', 1_000, {
+    await compare('vrfSign', {
       wasm: () => polka.sr25519VrfSign(msg, pair),
       scure: () => sr25519.vrf.sign(msg, pair.secretKey),
     });
-    await compare('vrfVerify', 1_000, {
+    await compare('vrfVerify', {
       wasm: () => polka.sr25519VrfVerify(msg, polkaVrfSig, pair.publicKey),
       scure: () => sr25519.vrf.verify(msg, nobleVrfSig, pair.publicKey),
     });

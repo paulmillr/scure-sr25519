@@ -2,13 +2,12 @@
 
 Audited & minimal JS implementation of sr25519 cryptography for Polkadot.
 
-- 🧜‍♂️ [sr25519 curve](https://wiki.polkadot.network/docs/learn-cryptography)
-- Schnorr signature on Ristretto compressed Ed25519
-- Hierarchical Deterministic Key Derivation (HDKD)
-- Verifiable random function (VRF)
-- Uses [Merlin](https://merlin.cool/index.html), which is based on [Strobe128](https://strobe.sourceforge.io).
-  - **_NOTE_**: We implement only parts of these protocols which required for sr25519.
+- 🧮 [sr25519 curve](https://wiki.polkadot.network/docs/learn-cryptography) - schnorr signature on ristretto-compressed ed25519
+- HDKD: Hierarchical Deterministic Key Derivation
+- VRF: Verifiable random function
+- Works with [Merlin](https://merlin.cool/index.html), which is based on [Strobe128](https://strobe.sourceforge.io).
 - ➰ Uses [noble-curves](https://github.com/paulmillr/noble-curves) for underlying arithmetics
+- 15KB (gzipped) with bundled deps
 
 ### This library belongs to _scure_
 
@@ -65,6 +64,10 @@ const publicKey = sr25519.HDKD.publicSoft(pubSelf, cc);
 const signature = sr25519.vrf.sign(msg, pair.secretKey);
 const isValid = sr25519.vrf.verify(msg, sig, pair.publicKey);
 ```
+
+### Merlin and Strobe
+
+We implement only the parts of these protocols that sr25519 requires.
 
 ### Migration from `@polkadot/utils-crypto`
 

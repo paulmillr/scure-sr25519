@@ -1,6 +1,6 @@
 {
   "name": "@scure/sr25519",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Audited & minimal implementation of sr25519 (polkadot) cryptography, with Merlin and Strobe",
   "files": [
     "index.js",

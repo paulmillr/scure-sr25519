@@ -183,6 +183,15 @@ describe('sr25519', () => {
       deepStrictEqual(t.strobe.posBegin, 0);
       deepStrictEqual(t.strobe.curFlags, 7);
     });
+    should('validator constructors', () => {
+      const s = new Strobe128('ctx');
+      const t = new SigningContext('ctx');
+      throws(() => s.AD(1 as any, false), TypeError);
+      throws(() => t.challengeBytes('label', 1.5 as any), RangeError);
+      throws(() => sr25519.getPublicKey('x' as any), TypeError);
+      throws(() => sr25519.secretFromSeed(new Uint8Array(31)), RangeError);
+      throws(() => sr25519.fromKeypair(new Uint8Array(95)), RangeError);
+    });
   });
   should('secretFromSeed', () => {
     const seed = hexToBytes('fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e');

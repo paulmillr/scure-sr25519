@@ -22,28 +22,29 @@ import { keccakP } from '@noble/hashes/sha3.js';
 import { concatBytes, randomBytes, u32, utf8ToBytes } from '@noble/hashes/utils.js';
 
 // prettier-ignore
-const _0n = BigInt(0), _3n = BigInt(3);
-const RistrettoPoint = ristretto255.Point;
+const _0n = /* @__PURE__ */ BigInt(0), _3n = /* @__PURE__ */ BigInt(3);
+const RistrettoPoint = /* @__PURE__ */ (() => ristretto255.Point)();
 type Point = typeof ristretto255.Point.BASE;
 type Data = string | Uint8Array;
 
 function toData(d: Data): Uint8Array {
   if (typeof d === 'string') return utf8ToBytes(d);
   if (isBytes(d)) return d;
-  throw new Error('Wrong data');
+  throw new TypeError('Wrong data');
 }
 // Could've used bytes from hashes/assert, but we add extra arg
 function abytes(title: string, b: Uint8Array, ...lengths: number[]) {
-  if (!isBytes(b)) throw new Error(`${title}: Uint8Array expected`);
+  if (!isBytes(b)) throw new TypeError(`${title}: Uint8Array expected`);
   if (lengths.length && !lengths.includes(b.length))
-    throw new Error(
+    throw new RangeError(
       `${title}: Uint8Array expected of length ${lengths}, not of length=${b.length}`
     );
 }
 
 function checkU32(title: string, n: number) {
+  if (typeof n !== 'number') throw new TypeError(`${title}: wrong u32 integer: ${n}`);
   if (!Number.isSafeInteger(n) || n < 0 || n > 0xff_ff_ff_ff)
-    throw new Error(`${title}: wrong u32 integer: ${n}`);
+    throw new RangeError(`${title}: wrong u32 integer: ${n}`);
   return n;
 }
 
@@ -51,8 +52,8 @@ function cleanBytes(...list: Uint8Array[]): void {
   for (const t of list) t.fill(0);
 }
 
-const EMPTY = Uint8Array.of();
-const CURVE_ORDER = ed25519.Point.Fn.ORDER;
+const EMPTY = /* @__PURE__ */ Uint8Array.of();
+const CURVE_ORDER = /* @__PURE__ */ (() => ed25519.Point.Fn.ORDER)();
 function parseScalar(title: string, bytes: Uint8Array) {
   abytes(title, bytes, 32);
   const n = bytesToNumberLE(bytes);
@@ -64,14 +65,15 @@ const modN = (n: bigint) => mod(n, CURVE_ORDER);
 // - https://strobe.sourceforge.io/specs/
 // We can implement full version, but seems nobody uses this much.
 const STROBE_R: number = 166;
-const Flags = {
-  I: 1,
-  A: 1 << 1,
-  C: 1 << 2,
-  T: 1 << 3,
-  M: 1 << 4,
-  K: 1 << 5,
-} as const;
+const Flags = /* @__PURE__ */ (() =>
+  ({
+    I: 1,
+    A: 1 << 1,
+    C: 1 << 2,
+    T: 1 << 3,
+    M: 1 << 4,
+    K: 1 << 5,
+  }) as const)();
 
 // Differences: suffix, additional methods/flags
 class Strobe128 {
@@ -245,18 +247,47 @@ class SigningContext extends Merlin {
 }
 // /Merlin signing context
 
-const MASK = bitMask(256);
+const MASK = /* @__PURE__ */ bitMask(256);
 // == (n * CURVE.h) % CURVE_BIT_MASK
 const encodeScalar = (n: bigint) => numberToBytesLE((n << _3n) & MASK, 32);
 // n / CURVE.h
 const decodeScalar = (n: Uint8Array) => bytesToNumberLE(n) >> _3n;
 
 // NOTE: secretKey is 64 bytes (key + nonce). This required for HDKD, since key can be derived not only from seed, but from other keys.
+/**
+ * Derives the public key for an sr25519 secret key.
+ * @param secretKey - 64-byte secret key returned by `secretFromSeed()`
+ * @returns 32-byte sr25519 public key
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument lengths. {@link RangeError}
+ * @example
+ * Derive the public key bytes for a freshly expanded sr25519 secret key.
+ * ```ts
+ * import { getPublicKey, secretFromSeed } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * const secretKey = secretFromSeed(randomBytes(32));
+ * getPublicKey(secretKey);
+ * ```
+ */
 export function getPublicKey(secretKey: Uint8Array): Uint8Array {
   abytes('secretKey', secretKey, 64);
   const scalar = decodeScalar(secretKey.subarray(0, 32));
   return RistrettoPoint.BASE.multiply(scalar).toBytes();
 }
+/**
+ * Expands a 32-byte seed into a 64-byte sr25519 secret key.
+ * @param seed - 32-byte seed
+ * @returns 64-byte secret key
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument lengths. {@link RangeError}
+ * @example
+ * Turn seed material into the sr25519 secret-key format used by the rest of the API.
+ * ```ts
+ * import { secretFromSeed } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * secretFromSeed(randomBytes(32));
+ * ```
+ */
 export function secretFromSeed(seed: Uint8Array): Uint8Array {
   abytes('seed', seed, 32);
   const r = sha512(seed);
@@ -273,6 +304,26 @@ export function secretFromSeed(seed: Uint8Array): Uint8Array {
 }
 // Seems like ed25519 keypair? Generates keypair from other keypair in ed25519 format
 // NOTE: not exported from wasm. Do we need this at all?
+/**
+ * Converts a 96-byte keypair into the sr25519 key format used by this package.
+ * @param pair - 96-byte keypair with secret scalar, nonce, and public key
+ * @returns 96-byte normalized keypair
+ * @throws If the embedded public key does not match the secret key material. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument lengths. {@link RangeError}
+ * @example
+ * Normalize an sr25519 keypair buffer before handing it to another API.
+ * ```ts
+ * import { fromKeypair, getPublicKey, secretFromSeed } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * const secretKey = secretFromSeed(randomBytes(32));
+ * const pair = new Uint8Array(96);
+ * pair.set(secretKey.subarray(0, 32), 0);
+ * pair.set(secretKey.subarray(32), 32);
+ * pair.set(getPublicKey(secretKey), 64);
+ * fromKeypair(pair);
+ * ```
+ */
 export function fromKeypair(pair: Uint8Array): Uint8Array {
   abytes('keypair', pair, 96);
   const sk = pair.subarray(0, 32);
@@ -286,7 +337,25 @@ export function fromKeypair(pair: Uint8Array): Uint8Array {
 }
 
 // Basic sign. NOTE: context is currently constant. Please open issue if you need different one.
-const SUBSTRATE_CONTEXT = utf8ToBytes('substrate');
+const SUBSTRATE_CONTEXT = /* @__PURE__ */ utf8ToBytes('substrate');
+/**
+ * Signs a message with sr25519.
+ * @param secretKey - 64-byte secret key returned by `secretFromSeed()`
+ * @param message - message bytes to sign
+ * @param random - optional 32-byte nonce seed
+ * @returns 64-byte signature
+ * @throws On malformed sr25519 key or point data during signing. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument lengths. {@link RangeError}
+ * @example
+ * Sign a message with sr25519, using built-in nonce generation.
+ * ```ts
+ * import { secretFromSeed, sign } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * const secretKey = secretFromSeed(randomBytes(32));
+ * sign(secretKey, new Uint8Array([1, 2, 3]));
+ * ```
+ */
 export function sign(
   secretKey: Uint8Array,
   message: Uint8Array,
@@ -312,6 +381,26 @@ export function sign(
   t.clean();
   return res;
 }
+/**
+ * Verifies an sr25519 signature.
+ * @param message - message bytes that were signed
+ * @param signature - 64-byte signature returned by `sign()`
+ * @param publicKey - 32-byte public key returned by `getPublicKey()`
+ * @returns `true` when the signature is valid
+ * @throws If the signature marker or decoded sr25519 point data is invalid. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument lengths. {@link RangeError}
+ * @example
+ * Verify the signature against the same message and derived public key.
+ * ```ts
+ * import { getPublicKey, secretFromSeed, sign, verify } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * const secretKey = secretFromSeed(randomBytes(32));
+ * const message = new Uint8Array([1, 2, 3]);
+ * const signature = sign(secretKey, message);
+ * verify(message, signature, getPublicKey(secretKey));
+ * ```
+ */
 export function verify(message: Uint8Array, signature: Uint8Array, publicKey: Uint8Array): boolean {
   abytes('message', message);
   abytes('signature', signature, 64);
@@ -337,6 +426,24 @@ export function verify(message: Uint8Array, signature: Uint8Array, publicKey: Ui
   cleanBytes(sBytes);
   return RR.equals(R);
 }
+/**
+ * Computes an sr25519 shared secret.
+ * @param secretKey - 64-byte secret key returned by `secretFromSeed()`
+ * @param publicKey - peer 32-byte public key
+ * @returns 32-byte shared secret
+ * @throws If the peer public key is invalid or encodes the identity point. {@link Error}
+ * @throws On wrong argument types. {@link TypeError}
+ * @throws On wrong argument lengths. {@link RangeError}
+ * @example
+ * Compute the shared secret from one party's secret key and the other party's public key.
+ * ```ts
+ * import { getPublicKey, getSharedSecret, secretFromSeed } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * const alice = secretFromSeed(randomBytes(32));
+ * const bob = secretFromSeed(randomBytes(32));
+ * getSharedSecret(alice, getPublicKey(bob));
+ * ```
+ */
 export function getSharedSecret(secretKey: Uint8Array, publicKey: Uint8Array): Uint8Array {
   abytes('secretKey', secretKey, 64);
   abytes('publicKey', publicKey, 32);
@@ -347,11 +454,22 @@ export function getSharedSecret(secretKey: Uint8Array, publicKey: Uint8Array): U
 }
 
 // Derive
+/**
+ * Hierarchical deterministic key derivation helpers for sr25519.
+ * @example
+ * Derive a hardened child secret using a random 32-byte chain code.
+ * ```ts
+ * import { HDKD, secretFromSeed } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * const secretKey = secretFromSeed(randomBytes(32));
+ * HDKD.secretHard(secretKey, randomBytes(32));
+ * ```
+ */
 export const HDKD: {
   secretSoft(secretKey: Uint8Array, chainCode: Uint8Array, random?: Uint8Array): Uint8Array;
   publicSoft(publicKey: Uint8Array, chainCode: Uint8Array): Uint8Array;
   secretHard(secretKey: Uint8Array, chainCode: Uint8Array): Uint8Array;
-} = {
+} = /* @__PURE__ */ (() => ({
   secretSoft(secretKey, chainCode, random = randomBytes(32)) {
     abytes('secretKey', secretKey, 64);
     abytes('chainCode', chainCode, 32);
@@ -401,10 +519,10 @@ export const HDKD: {
     t.clean();
     return res;
   },
-};
+}))();
 // Schnorr DLEQ
 type Proof = { s: bigint; c: bigint };
-const dleq = {
+const dleq = /* @__PURE__ */ (() => ({
   proove(
     keyScalar: bigint,
     nonce: Uint8Array,
@@ -441,7 +559,7 @@ const dleq = {
     if (proof.c === realC) return { R, Hr, s: proof.s }; // proofBatchable
     return false;
   },
-};
+}))();
 
 // VRF: Verifiable Random Function
 function initVRF(ctx: Uint8Array, msg: Uint8Array, extra: Uint8Array, pubPoint: Point) {
@@ -473,7 +591,20 @@ type VRF = {
     extra?: Uint8Array
   ): boolean;
 };
-export const vrf: VRF = {
+/**
+ * Verifiable random function helpers built on sr25519.
+ * @example
+ * Generate and verify a VRF proof for the message.
+ * ```ts
+ * import { getPublicKey, secretFromSeed, vrf } from '@scure/sr25519';
+ * import { randomBytes } from '@noble/hashes/utils.js';
+ * const secretKey = secretFromSeed(randomBytes(32));
+ * const msg = new Uint8Array([1, 2, 3]);
+ * const sig = vrf.sign(msg, secretKey);
+ * vrf.verify(msg, sig, getPublicKey(secretKey));
+ * ```
+ */
+export const vrf: VRF = /* @__PURE__ */ (() => ({
   sign(msg, secretKey, ctx = EMPTY, extra = EMPTY, random = randomBytes(32)) {
     abytes('msg', msg);
     abytes('secretKey', secretKey, 64);
@@ -511,7 +642,7 @@ export const vrf: VRF = {
     const proofBatchable = dleq.verify(pubPoint, t, input, output, proof);
     return proofBatchable === false ? false : true;
   },
-};
+}))();
 
 // NOTE: for tests only, don't use
 export const __tests: {

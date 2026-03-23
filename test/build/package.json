@@ -6,6 +6,6 @@
   "type": "module",
   "devDependencies": {
     "esbuild": "0.25.0",
-    "lib": "file:../.."
+    "@scure/sr25519": "file:../.."
   }
 }

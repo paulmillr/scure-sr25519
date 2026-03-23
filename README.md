@@ -36,33 +36,54 @@ We support all major platforms and runtimes.
 
 ```ts
 import * as sr25519 from '@scure/sr25519';
-const signature = sr25519.sign(pair.secretKey, msg);
-const isValid = sr25519.verify(msg, polkaSig, pair.publicKey);
+import { randomBytes } from '@noble/hashes/utils.js';
+
+const seed = randomBytes(32);
 const secretKey = sr25519.secretFromSeed(seed);
+const peerSecretKey = sr25519.secretFromSeed(randomBytes(32));
+const msg = new Uint8Array([1, 2, 3]);
+const signature = sr25519.sign(secretKey, msg);
 const publicKey = sr25519.getPublicKey(secretKey);
-const sharedSecret = sr25519.getSharedSecret(secretKey, publicKey);
+const peerPublicKey = sr25519.getPublicKey(peerSecretKey);
+const isValid = sr25519.verify(msg, signature, publicKey);
+const sharedSecret = sr25519.getSharedSecret(secretKey, peerPublicKey);
 ```
 
 ### HDKD
 
 ```ts
+import * as sr25519 from '@scure/sr25519';
+import { randomBytes } from '@noble/hashes/utils.js';
+
+const seed = randomBytes(32);
+const cc = randomBytes(32);
+const parentSecret = sr25519.secretFromSeed(seed);
+const parentPublic = sr25519.getPublicKey(parentSecret);
+
 // hard
-const secretKey = sr25519.HDKD.secretHard(pair.secretKey, cc);
-const publicKey = sr25519.getPublicKey(secretKey);
+const hardSecret = sr25519.HDKD.secretHard(parentSecret, cc);
+const hardPublic = sr25519.getPublicKey(hardSecret);
 
 // soft
-const secretKey = sr25519.HDKD.secretSoft(pair.secretKey, cc);
-const publicKey = sr25519.getPublicKey(secretKey);
+const softSecret = sr25519.HDKD.secretSoft(parentSecret, cc);
+const softPublic = sr25519.getPublicKey(softSecret);
 
 // public
-const publicKey = sr25519.HDKD.publicSoft(pubSelf, cc);
+const derivedPublic = sr25519.HDKD.publicSoft(parentPublic, cc);
 ```
 
 ### VRF
 
 ```ts
-const signature = sr25519.vrf.sign(msg, pair.secretKey);
-const isValid = sr25519.vrf.verify(msg, sig, pair.publicKey);
+import * as sr25519 from '@scure/sr25519';
+import { randomBytes } from '@noble/hashes/utils.js';
+
+const seed = randomBytes(32);
+const msg = new Uint8Array([1, 2, 3]);
+const secretKey = sr25519.secretFromSeed(seed);
+const publicKey = sr25519.getPublicKey(secretKey);
+const signature = sr25519.vrf.sign(msg, secretKey);
+const isValid = sr25519.vrf.verify(msg, signature, publicKey);
 ```
 
 ### Merlin and Strobe

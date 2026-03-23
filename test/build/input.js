@@ -1,1 +1,1 @@
-export * from '../../index.js';
+export * from '@scure/sr25519';

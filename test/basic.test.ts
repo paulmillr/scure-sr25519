@@ -289,9 +289,10 @@ describe('sr25519', () => {
       bytesToHex(pub),
       '46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a'
     );
+    deepStrictEqual(bytesToHex(sr25519.getPublicKey(keypair.subarray(0, 64))), bytesToHex(pub));
     deepStrictEqual(
       bytesToHex(keypair),
-      '40817515e1588345b3923db46ff003cd2e9452d7b2d8b6a8444b52bde9985d8ffd190cce74df356432b410bd64682309d6dedb27c76845daf388557cbac3ca3446ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a'
+      '28b0ae221c6bb06856b287f60d7ea0d98552ea5a16db16956849aa371db3eb51fd190cce74df356432b410bd64682309d6dedb27c76845daf388557cbac3ca3446ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a'
     );
   });
   describe('HDKD', () => {
@@ -351,6 +352,12 @@ describe('sr25519', () => {
     const ctx = utf8ToBytes('my VRF context');
     const msg = utf8ToBytes('this is a message');
     const extra = utf8ToBytes('extra param');
+    should('sign does not mutate secret key', () => {
+      const secretKey = Uint8Array.from(priv);
+      const before = Uint8Array.from(secretKey);
+      sr25519.vrf.sign(msg, secretKey, ctx, extra, new Uint8Array(32));
+      deepStrictEqual(secretKey, before);
+    });
     should('basic', () => {
       const sig = sr25519.vrf.sign(msg, priv, ctx, extra, new Uint8Array(32));
       deepStrictEqual(

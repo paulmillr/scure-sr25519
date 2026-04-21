@@ -86,6 +86,29 @@ const signature = sr25519.vrf.sign(msg, secretKey);
 const isValid = sr25519.vrf.verify(msg, signature, publicKey);
 ```
 
+### Import schnorrkel / polkadot keypairs
+
+`fromKeypair()` expects the 96-byte schnorrkel "half-Ed25519" layout:
+`secret.to_ed25519_bytes() || public.to_bytes()`.
+This is the same format used by schnorrkel `Keypair::to_half_ed25519_bytes()`.
+The example below uses the same test vector shown in schnorrkel's
+`Keypair::from_half_ed25519_bytes()` docs.
+
+```ts
+import * as sr25519 from '@scure/sr25519';
+import { hexToBytes } from '@noble/hashes/utils.js';
+
+const pair = hexToBytes(
+  // secret.to_ed25519_bytes()
+  '28b0ae221c6bb06856b287f60d7ea0d98552ea5a16db16956849aa371db3eb51' +
+    'fd190cce74df356432b410bd64682309d6dedb27c76845daf388557cbac3ca34' +
+    // public.to_bytes()
+    '46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a'
+);
+const normalized = sr25519.fromKeypair(pair);
+const publicKey = sr25519.getPublicKey(normalized.subarray(0, 64));
+```
+
 ### Merlin and Strobe
 
 We implement only the parts of these protocols that sr25519 requires.

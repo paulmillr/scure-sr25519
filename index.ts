@@ -19,7 +19,14 @@ import {
 } from '@noble/curves/utils.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import { keccakP } from '@noble/hashes/sha3.js';
-import { concatBytes, randomBytes, u32, utf8ToBytes } from '@noble/hashes/utils.js';
+import {
+  concatBytes,
+  randomBytes,
+  u32,
+  utf8ToBytes,
+  type TArg,
+  type TRet,
+} from '@noble/hashes/utils.js';
 
 // prettier-ignore
 const _0n = /* @__PURE__ */ BigInt(0), _3n = /* @__PURE__ */ BigInt(3);
@@ -27,13 +34,17 @@ const RistrettoPoint = /* @__PURE__ */ (() => ristretto255.Point)();
 type Point = typeof ristretto255.Point.BASE;
 type Data = string | Uint8Array;
 
-function toData(d: Data): Uint8Array {
-  if (typeof d === 'string') return utf8ToBytes(d);
-  if (isBytes(d)) return d;
+function toData(d: TArg<Data>): TRet<Uint8Array> {
+  // Merlin/STROBE operate on byte strings.
+  // JS strings are accepted here only as a UTF-8 convenience wrapper.
+  if (typeof d === 'string') return utf8ToBytes(d) as TRet<Uint8Array>;
+  if (isBytes(d)) return d as TRet<Uint8Array>;
   throw new TypeError('Wrong data');
 }
 // Could've used bytes from hashes/assert, but we add extra arg
-function abytes(title: string, b: Uint8Array, ...lengths: number[]) {
+function abytes(title: string, b: TArg<Uint8Array>, ...lengths: number[]) {
+  // Fixed-width wire formats pass explicit lengths.
+  // Raw transcript/message inputs only need the byte-string check.
   if (!isBytes(b)) throw new TypeError(`${title}: Uint8Array expected`);
   if (lengths.length && !lengths.includes(b.length))
     throw new RangeError(
@@ -42,29 +53,41 @@ function abytes(title: string, b: Uint8Array, ...lengths: number[]) {
 }
 
 function checkU32(title: string, n: number) {
+  // Merlin frames message, challenge, and witness lengths with LE32,
+  // so these counts must stay within unsigned 32-bit range.
   if (typeof n !== 'number') throw new TypeError(`${title}: wrong u32 integer: ${n}`);
   if (!Number.isSafeInteger(n) || n < 0 || n > 0xff_ff_ff_ff)
     throw new RangeError(`${title}: wrong u32 integer: ${n}`);
   return n;
 }
 
-function cleanBytes(...list: Uint8Array[]): void {
+function cleanBytes(...list: TArg<Uint8Array[]>): void {
+  // Wipe temporary secret buffers in place once the caller no longer needs them.
   for (const t of list) t.fill(0);
 }
 
+// Shared empty byte string for transcript steps and default ctx/extra values that
+// intentionally commit no payload.
 const EMPTY = /* @__PURE__ */ Uint8Array.of();
+// RFC 9496 §4.4: ristretto255 scalars live modulo the subgroup order l.
 const CURVE_ORDER = /* @__PURE__ */ (() => ed25519.Point.Fn.ORDER)();
-function parseScalar(title: string, bytes: Uint8Array) {
+function parseScalar(title: string, bytes: TArg<Uint8Array>) {
+  // Parse canonical 32-byte little-endian scalars; callers that need reduction use modN instead.
   abytes(title, bytes, 32);
   const n = bytesToNumberLE(bytes);
   aInRange(title, n, _0n, CURVE_ORDER);
   return n;
 }
+// Reduce wide transcript outputs and scalar expressions modulo the ristretto255 order.
 const modN = (n: bigint) => mod(n, CURVE_ORDER);
 // STROBE128 (minimal version required for Merlin)
 // - https://strobe.sourceforge.io/specs/
 // We can implement full version, but seems nobody uses this much.
+// Strobe-128 over Keccak-f/1600 uses r/8 = 168 bytes and reserves 2 framing bytes,
+// leaving 166 user-data bytes.
 const STROBE_R: number = 166;
+// STROBE beginOp uses the flag order (I, A, C, T, M, K), with M transcript-only and
+// K as the key-tree extension bit.
 const Flags = /* @__PURE__ */ (() =>
   ({
     I: 1,
@@ -76,6 +99,8 @@ const Flags = /* @__PURE__ */ (() =>
   }) as const)();
 
 // Differences: suffix, additional methods/flags
+// Minimal STROBE-128 subset for Merlin: metadata / AD / PRF / KEY only,
+// with transport operations intentionally unsupported.
 class Strobe128 {
   state: Uint8Array = new Uint8Array(200);
   state32: Uint32Array;
@@ -93,6 +118,7 @@ class Strobe128 {
     keccakP(this.state32);
   }
   private runF(): void {
+    // STROBE A.2: finalize the current block with p_begin, DDATA, and DRATE before applying F.
     this.state[this.pos] ^= this.posBegin;
     this.state[this.pos + 1] ^= 0x04;
     this.state[STROBE_R + 1] ^= 0x80;
@@ -111,6 +137,8 @@ class Strobe128 {
   private squeeze(len: number): Uint8Array {
     const data = new Uint8Array(len);
     for (let i = 0; i < data.length; i++) {
+      // PRF uses zero input bytes, so duplex emits state[pos] and then overwrites
+      // the consumed lane with zero.
       data[i] = this.state[this.pos];
       this.state[this.pos++] = 0;
       if (this.pos === STROBE_R) this.runF();
@@ -119,12 +147,15 @@ class Strobe128 {
   }
   private overwrite(data: Uint8Array): void {
     for (let i = 0; i < data.length; i++) {
+      // KEY uses the C=1,T=0 branch, so duplex overwrites the state lane with the input byte.
       this.state[this.pos++] = data[i];
       if (this.pos === STROBE_R) this.runF();
     }
   }
   private beginOp(flags: number, more: boolean): void {
     if (more) {
+      // Streaming continuation: do not re-emit beginOp framing, but require the
+      // same logical operation flags.
       if (this.curFlags !== flags) {
         throw new Error(
           `Continued op with changed flags from ${this.curFlags.toString(2)} to ${flags.toString(2)}`
@@ -159,6 +190,8 @@ class Strobe128 {
   }
   // Utils
   clone(): Strobe128 {
+    // Allocate a fresh state/state32 pair, then overwrite it with this snapshot
+    // so the clone shares no backing storage.
     const n = new Strobe128('0'); // tmp
     n.pos = this.pos;
     n.posBegin = this.posBegin;
@@ -186,12 +219,14 @@ class Merlin {
   appendMessage(label: Data, message: Data): void {
     this.strobe.metaAD(label, false);
     checkU32('Merlin.appendMessage', message.length);
+    // Merlin frames label || LE32(len) as one continued meta-AD operation before the AD payload.
     this.strobe.metaAD(numberToBytesLE(message.length, 4), true);
     this.strobe.AD(message, false);
   }
   challengeBytes(label: Data, len: number): Uint8Array {
     this.strobe.metaAD(label, false);
     checkU32('Merlin.challengeBytes', len);
+    // Merlin frames label || LE32(len) as one continued meta-AD operation before the PRF output.
     this.strobe.metaAD(numberToBytesLE(len, 4), true);
     return this.strobe.PRF(len, false);
   }
@@ -200,15 +235,20 @@ class Merlin {
   }
 }
 // /Merlin
-// Merlin signging context/transcript (sr25519 specific stuff, Merlin and Strobe are generic (but minimal))
+// Merlin signging context/transcript (sr25519 specific stuff, Merlin and Strobe
+// are generic (but minimal))
 class SigningContext extends Merlin {
   constructor(name: string) {
+    // Seed the transcript name here; the empty-label signing-context payload is
+    // appended later via label(...).
     super(name);
   }
   label(label: Data): void {
     this.appendMessage('', label);
   }
   bytes(bytes: Uint8Array): this {
+    // Unlike schnorrkel's reusable base-context helper, this minimal port mutates the
+    // live transcript and returns it for chaining.
     this.appendMessage('sign-bytes', bytes);
     return this;
   }
@@ -219,9 +259,12 @@ class SigningContext extends Merlin {
     this.appendMessage(label, point.toBytes());
   }
   challengeScalar(label: Data): bigint {
+    // Schnorrkel challenge scalars use 64 transcript bytes reduced modulo the ristretto255 order.
     return modN(bytesToNumberLE(this.challengeBytes(label, 64)));
   }
   witnessScalar(label: Data, random: Uint8Array, nonceSeeds: Uint8Array[] = []): bigint {
+    // Schnorrkel witness scalars use 64 transcript-RNG bytes reduced modulo the
+    // ristretto255 order.
     return modN(bytesToNumberLE(this.witnessBytes(label, 64, random, nonceSeeds)));
   }
   witnessBytes(
@@ -241,6 +284,7 @@ class SigningContext extends Merlin {
     abytes('random', random, 32);
     strobeRng.metaAD('rng', false);
     strobeRng.KEY(random, false);
+    // TranscriptRng output is unlabeled: commit only LE32(len) before the final PRF extraction.
     strobeRng.metaAD(numberToBytesLE(len, 4), false);
     return strobeRng.PRF(len, false);
   }
@@ -248,12 +292,16 @@ class SigningContext extends Merlin {
 // /Merlin signing context
 
 const MASK = /* @__PURE__ */ bitMask(256);
+// Serialize the internal scalar in the Ed25519-style secret-key form expected by
+// polkadot-js / schnorrkel `to_ed25519_bytes()`.
 // == (n * CURVE.h) % CURVE_BIT_MASK
 const encodeScalar = (n: bigint) => numberToBytesLE((n << _3n) & MASK, 32);
-// n / CURVE.h
-const decodeScalar = (n: Uint8Array) => bytesToNumberLE(n) >> _3n;
+// Parse the Ed25519-style secret-key scalar half back into the internal scalar by
+// dividing away the cofactor.
+const decodeScalar = (n: TArg<Uint8Array>) => bytesToNumberLE(n) >> _3n;
 
-// NOTE: secretKey is 64 bytes (key + nonce). This required for HDKD, since key can be derived not only from seed, but from other keys.
+// NOTE: secretKey is 64 bytes (key + nonce). This required for HDKD, since key can be
+// derived not only from seed, but from other keys.
 /**
  * Derives the public key for an sr25519 secret key.
  * @param secretKey - 64-byte secret key returned by `secretFromSeed()`
@@ -269,7 +317,7 @@ const decodeScalar = (n: Uint8Array) => bytesToNumberLE(n) >> _3n;
  * getPublicKey(secretKey);
  * ```
  */
-export function getPublicKey(secretKey: Uint8Array): Uint8Array {
+export function getPublicKey(secretKey: TArg<Uint8Array>): TRet<Uint8Array> {
   abytes('secretKey', secretKey, 64);
   const scalar = decodeScalar(secretKey.subarray(0, 32));
   return RistrettoPoint.BASE.multiply(scalar).toBytes();
@@ -288,9 +336,11 @@ export function getPublicKey(secretKey: Uint8Array): Uint8Array {
  * secretFromSeed(randomBytes(32));
  * ```
  */
-export function secretFromSeed(seed: Uint8Array): Uint8Array {
+export function secretFromSeed(seed: TArg<Uint8Array>): TRet<Uint8Array> {
   abytes('seed', seed, 32);
   const r = sha512(seed);
+  // Match schnorrkel's Ed25519-compatible seed expansion before normalizing into this
+  // package's secret-key byte format.
   // NOTE: different from ed25519
   r[0] &= 248;
   r[31] &= 63;
@@ -305,31 +355,36 @@ export function secretFromSeed(seed: Uint8Array): Uint8Array {
 // Seems like ed25519 keypair? Generates keypair from other keypair in ed25519 format
 // NOTE: not exported from wasm. Do we need this at all?
 /**
- * Converts a 96-byte keypair into the sr25519 key format used by this package.
- * @param pair - 96-byte keypair with secret scalar, nonce, and public key
+ * Converts a schnorrkel-style 96-byte keypair into the sr25519 key format used by this package.
+ * @param pair - 96-byte keypair in schnorrkel
+ * `to_half_ed25519_bytes()` layout: `secret.to_ed25519_bytes() || public.to_bytes()`
  * @returns 96-byte normalized keypair
  * @throws If the embedded public key does not match the secret key material. {@link Error}
  * @throws On wrong argument types. {@link TypeError}
  * @throws On wrong argument lengths. {@link RangeError}
  * @example
- * Normalize an sr25519 keypair buffer before handing it to another API.
+ * Normalize a compatible 96-byte keypair assembled from this package's secret/public key outputs.
  * ```ts
  * import { fromKeypair, getPublicKey, secretFromSeed } from '@scure/sr25519';
- * import { randomBytes } from '@noble/hashes/utils.js';
+ * import { concatBytes, randomBytes } from '@noble/hashes/utils.js';
+ * // Build the package's 64-byte secret format: scalar || nonce.
  * const secretKey = secretFromSeed(randomBytes(32));
- * const pair = new Uint8Array(96);
- * pair.set(secretKey.subarray(0, 32), 0);
- * pair.set(secretKey.subarray(32), 32);
- * pair.set(getPublicKey(secretKey), 64);
- * fromKeypair(pair);
+ * // Assemble the 96-byte pair accepted by fromKeypair(): secret || pub.
+ * const pair = concatBytes(secretKey, getPublicKey(secretKey));
+ * // Re-encode and validate the pair before passing it to other APIs.
+ * const normalized = fromKeypair(pair);
+ * // Reuse the normalized 64-byte secret half with package APIs.
+ * const publicKey = getPublicKey(normalized.subarray(0, 64));
  * ```
  */
-export function fromKeypair(pair: Uint8Array): Uint8Array {
+export function fromKeypair(pair: TArg<Uint8Array>): TRet<Uint8Array> {
   abytes('keypair', pair, 96);
   const sk = pair.subarray(0, 32);
   const nonce = pair.subarray(32, 64);
   const pubBytes = pair.subarray(64, 96);
-  const key = encodeScalar(bytesToNumberLE(sk));
+  // Decode first: the half-ed25519 secret half is already cofactor-shifted, so
+  // re-encoding raw bytes would multiply by 8 twice.
+  const key = encodeScalar(decodeScalar(sk));
   const realPub = getPublicKey(pair.subarray(0, 64));
   if (!equalBytes(pubBytes, realPub)) throw new Error('wrong public key');
   // No need to clean since subarray's
@@ -357,10 +412,10 @@ const SUBSTRATE_CONTEXT = /* @__PURE__ */ utf8ToBytes('substrate');
  * ```
  */
 export function sign(
-  secretKey: Uint8Array,
-  message: Uint8Array,
-  random: Uint8Array = randomBytes(32)
-): Uint8Array {
+  secretKey: TArg<Uint8Array>,
+  message: TArg<Uint8Array>,
+  random: TArg<Uint8Array> = randomBytes(32)
+): TRet<Uint8Array> {
   abytes('message', message);
   abytes('secretKey', secretKey, 64);
   const t = new SigningContext('SigningContext');
@@ -369,6 +424,8 @@ export function sign(
   const keyScalar = decodeScalar(secretKey.subarray(0, 32));
   const nonce = secretKey.subarray(32, 64);
   const pubPoint = RistrettoPoint.fromBytes(getPublicKey(secretKey));
+  // Bind the signer public key before nonce derivation so witness bytes stay tied to
+  // the actual signing key.
   t.protoName('Schnorr-sig');
   t.commitPoint('sign:pk', pubPoint);
   const r = t.witnessScalar('signing', random, [nonce]);
@@ -401,7 +458,11 @@ export function sign(
  * verify(message, signature, getPublicKey(secretKey));
  * ```
  */
-export function verify(message: Uint8Array, signature: Uint8Array, publicKey: Uint8Array): boolean {
+export function verify(
+  message: TArg<Uint8Array>,
+  signature: TArg<Uint8Array>,
+  publicKey: TArg<Uint8Array>
+): boolean {
   abytes('message', message);
   abytes('signature', signature, 64);
   abytes('publicKey', publicKey, 32);
@@ -444,7 +505,10 @@ export function verify(message: Uint8Array, signature: Uint8Array, publicKey: Ui
  * getSharedSecret(alice, getPublicKey(bob));
  * ```
  */
-export function getSharedSecret(secretKey: Uint8Array, publicKey: Uint8Array): Uint8Array {
+export function getSharedSecret(
+  secretKey: TArg<Uint8Array>,
+  publicKey: TArg<Uint8Array>
+): TRet<Uint8Array> {
   abytes('secretKey', secretKey, 64);
   abytes('publicKey', publicKey, 32);
   const keyScalar = decodeScalar(secretKey.subarray(0, 32));
@@ -465,11 +529,11 @@ export function getSharedSecret(secretKey: Uint8Array, publicKey: Uint8Array): U
  * HDKD.secretHard(secretKey, randomBytes(32));
  * ```
  */
-export const HDKD: {
+export const HDKD: TRet<{
   secretSoft(secretKey: Uint8Array, chainCode: Uint8Array, random?: Uint8Array): Uint8Array;
   publicSoft(publicKey: Uint8Array, chainCode: Uint8Array): Uint8Array;
   secretHard(secretKey: Uint8Array, chainCode: Uint8Array): Uint8Array;
-} = /* @__PURE__ */ (() => ({
+}> = /* @__PURE__ */ Object.freeze({
   secretSoft(secretKey, chainCode, random = randomBytes(32)) {
     abytes('secretKey', secretKey, 64);
     abytes('chainCode', chainCode, 32);
@@ -499,6 +563,8 @@ export const HDKD: {
     t.appendMessage('chain-code', chainCode);
     t.commitPoint('public-key', pubPoint);
     const scalar = t.challengeScalar('HDKD-scalar');
+    // Consume the companion chain code even though this API returns only the child public key,
+    // to mirror schnorrkel/polkadot derivation order.
     t.challengeBytes('HDKD-chaincode', 32);
     t.clean();
     return pubPoint.add(RistrettoPoint.BASE.multiply(scalar)).toBytes();
@@ -506,6 +572,8 @@ export const HDKD: {
   secretHard(secretKey, chainCode) {
     abytes('secretKey', secretKey, 64);
     abytes('chainCode', chainCode, 32);
+    // Hard derivation hashes the canonical internal scalar bytes, not the Ed25519-style
+    // serialized secret half.
     const key = numberToBytesLE(decodeScalar(secretKey.subarray(0, 32)), 32);
     const t = new SigningContext('SchnorrRistrettoHDKD');
     t.bytes(EMPTY);
@@ -519,57 +587,71 @@ export const HDKD: {
     t.clean();
     return res;
   },
-}))();
+});
 // Schnorr DLEQ
+// Follow the kusama/schnorrkel VRF transcript order: commit `vrf:pk` after `vrf:h^r`.
 type Proof = { s: bigint; c: bigint };
 const dleq = /* @__PURE__ */ (() => ({
   proove(
     keyScalar: bigint,
-    nonce: Uint8Array,
+    nonce: TArg<Uint8Array>,
     pubPoint: Point,
-    t: SigningContext,
+    t: TArg<SigningContext>,
     input: Point,
     output: Point,
-    random: Uint8Array
+    random: TArg<Uint8Array>
   ) {
-    t.protoName('DLEQProof');
-    t.commitPoint('vrf:h', input);
-    const r = t.witnessScalar(`proving${'\0'}0`, random, [nonce]);
+    const tx = t as SigningContext;
+    const ns = nonce as Uint8Array;
+    const rnd = random as Uint8Array;
+    tx.protoName('DLEQProof');
+    tx.commitPoint('vrf:h', input);
+    const r = tx.witnessScalar(`proving${'\0'}0`, rnd, [ns]);
     const R = RistrettoPoint.BASE.multiply(r);
-    t.commitPoint('vrf:R=g^r', R);
+    tx.commitPoint('vrf:R=g^r', R);
     const Hr = input.multiply(r);
-    t.commitPoint('vrf:h^r', Hr);
-    t.commitPoint('vrf:pk', pubPoint);
-    t.commitPoint('vrf:h^sk', output);
-    const c = t.challengeScalar('prove');
+    tx.commitPoint('vrf:h^r', Hr);
+    tx.commitPoint('vrf:pk', pubPoint);
+    tx.commitPoint('vrf:h^sk', output);
+    const c = tx.challengeScalar('prove');
     const s = modN(r - c * keyScalar);
     return { proof: { c, s } as Proof, proofBatchable: { R, Hr, s } };
   },
-  verify(pubPoint: Point, t: SigningContext, input: Point, output: Point, proof: Proof) {
+  verify(pubPoint: Point, t: TArg<SigningContext>, input: Point, output: Point, proof: Proof) {
+    const tx = t as SigningContext;
     if (pubPoint.equals(RistrettoPoint.ZERO)) return false;
-    t.protoName('DLEQProof');
-    t.commitPoint('vrf:h', input);
+    tx.protoName('DLEQProof');
+    tx.commitPoint('vrf:h', input);
     const R = pubPoint.multiply(proof.c).add(RistrettoPoint.BASE.multiply(proof.s));
-    t.commitPoint('vrf:R=g^r', R);
+    tx.commitPoint('vrf:R=g^r', R);
     const Hr = output.multiply(proof.c).add(input.multiply(proof.s));
-    t.commitPoint('vrf:h^r', Hr);
-    t.commitPoint('vrf:pk', pubPoint);
-    t.commitPoint('vrf:h^sk', output);
-    const realC = t.challengeScalar('prove');
+    tx.commitPoint('vrf:h^r', Hr);
+    tx.commitPoint('vrf:pk', pubPoint);
+    tx.commitPoint('vrf:h^sk', output);
+    const realC = tx.challengeScalar('prove');
     if (proof.c === realC) return { R, Hr, s: proof.s }; // proofBatchable
     return false;
   },
 }))();
 
 // VRF: Verifiable Random Function
-function initVRF(ctx: Uint8Array, msg: Uint8Array, extra: Uint8Array, pubPoint: Point) {
+function initVRF(
+  ctx: TArg<Uint8Array>,
+  msg: TArg<Uint8Array>,
+  extra: TArg<Uint8Array>,
+  pubPoint: Point
+) {
   const t = new SigningContext('SigningContext');
   t.label(ctx);
   t.bytes(msg);
   t.commitPoint('vrf-nm-pk', pubPoint);
   const hash = t.challengeBytes('VRFHash', 64);
   const input = ristretto255_hasher.deriveToCurve!(hash);
+  // Hash the input on the SigningContext transcript, then start DLEQ on a fresh `VRF`
+  // transcript like schnorrkel.
   const transcript = new SigningContext('VRF');
+  // Extra bytes bind only the separate DLEQ transcript; they do not change the hashed
+  // VRF input point.
   if (extra.length) transcript.label(extra);
   t.clean();
   cleanBytes(hash);
@@ -604,14 +686,16 @@ type VRF = {
  * vrf.verify(msg, sig, getPublicKey(secretKey));
  * ```
  */
-export const vrf: VRF = /* @__PURE__ */ (() => ({
+export const vrf: TRet<VRF> = /* @__PURE__ */ Object.freeze({
   sign(msg, secretKey, ctx = EMPTY, extra = EMPTY, random = randomBytes(32)) {
     abytes('msg', msg);
     abytes('secretKey', secretKey, 64);
     abytes('ctx', ctx);
     abytes('extra', extra);
     const keyScalar = decodeScalar(secretKey.subarray(0, 32));
-    const nonce = secretKey.subarray(32, 64);
+    // Copy the nonce seed before witness generation so cleanup does not zeroize
+    // the caller's secretKey buffer.
+    const nonce = Uint8Array.from(secretKey.subarray(32, 64));
     const pubPoint = RistrettoPoint.fromBytes(getPublicKey(secretKey));
     const { input, t } = initVRF(ctx, msg, extra, pubPoint);
     const output = input.multiply(keyScalar);
@@ -642,15 +726,15 @@ export const vrf: VRF = /* @__PURE__ */ (() => ({
     const proofBatchable = dleq.verify(pubPoint, t, input, output, proof);
     return proofBatchable === false ? false : true;
   },
-}))();
+});
 
 // NOTE: for tests only, don't use
 export const __tests: {
   Strobe128: typeof Strobe128;
   Merlin: typeof Merlin;
   SigningContext: typeof SigningContext;
-} = {
+} = /* @__PURE__ */ Object.freeze({
   Strobe128,
   Merlin,
   SigningContext,
-};
+});

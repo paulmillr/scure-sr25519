@@ -122,9 +122,12 @@ We implement only the parts of these protocols that sr25519 requires.
 
 ## Security
 
-The library has been independently audited:
+The library has been audited:
 
-- at version 0.3.0, in Aug 2025, by [Oak Security](https://www.oaksecurity.io)
+- at version 2.2.0, in Apr 2026, by ourselves (self-audited)
+  - Scope: everything
+  - [Changes since audit](https://github.com/paulmillr/scure-sr25519/compare/2.2.0..main)
+- at version 0.3.0, in Aug 2025, independently, by [Oak Security](https://www.oaksecurity.io)
   - PDFs: [website](https://github.com/oak-security/audit-reports/tree/8f30dd4b59eae97194fb612aa8e773824a37bf65/Polkadot), [2025-08-22](./audit/2025-08-22-oak-security-audit.pdf), [2025-06-12](./audit/2025-06-12-oak-security-audit.pdf), [2025-06-12-fuzz](./audit/2025-06-12-oak-security-fuzzing.pdf)
   - [Changes since audit](https://github.com/paulmillr/scure-sr25519/compare/0.3.0..main)
   - Scope: everything

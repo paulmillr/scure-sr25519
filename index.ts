@@ -295,9 +295,12 @@ const MASK = /* @__PURE__ */ bitMask(256);
 // Serialize the internal scalar in the Ed25519-style secret-key form expected by
 // polkadot-js / schnorrkel `to_ed25519_bytes()`.
 // == (n * CURVE.h) % CURVE_BIT_MASK
+// MULTIPLY BY COFACTOR (x<<3n === x*8n)
 const encodeScalar = (n: bigint) => numberToBytesLE((n << _3n) & MASK, 32);
 // Parse the Ed25519-style secret-key scalar half back into the internal scalar by
 // dividing away the cofactor.
+// https://github.com/paritytech/schnorrkel/blob/98b9cef8abce87833a53daec6bee9ec6f75c7aff/src/keys.rs#L537-L539
+// DIVIDE BY COFACTOR (x>>3n === x/8n)
 const decodeScalar = (n: TArg<Uint8Array>) => bytesToNumberLE(n) >> _3n;
 
 // NOTE: secretKey is 64 bytes (key + nonce). This required for HDKD, since key can be

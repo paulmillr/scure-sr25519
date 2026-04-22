@@ -43,6 +43,7 @@
     "schnorr",
     "schnorrkel",
     "ristretto",
+    "hdkd",
     "ed25519"
   ],
   "homepage": "https://paulmillr.com/noble/#scure",

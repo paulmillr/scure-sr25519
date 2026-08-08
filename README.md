@@ -174,13 +174,6 @@ vrfSign wasm x 2,470 ops/sec @ 404μs/op
 vrfVerify wasm x 2,917 ops/sec @ 342μs/op
 ```
 
-## Contributing & testing
-
-1. Clone the repository
-2. `npm install` to install build dependencies like TypeScript
-3. `npm run build` to compile TypeScript code
-4. `npm run test` will execute all main tests
-
 ## License
 
 The MIT License (MIT)

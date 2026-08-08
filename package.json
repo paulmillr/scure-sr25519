@@ -4,30 +4,25 @@
   "description": "Audited & minimal implementation of sr25519 (polkadot) cryptography, with Merlin and Strobe",
   "files": [
     "index.js",
-    "index.js.map",
     "index.d.ts",
-    "index.d.ts.map",
     "index.ts"
   ],
   "dependencies": {
-    "@noble/curves": "~2.2.0",
-    "@noble/hashes": "~2.2.0"
+    "@noble/curves": "~2.3.0",
+    "@noble/hashes": "~2.3.0"
   },
   "devDependencies": {
-    "@paulmillr/jsbt": "0.6.0",
+    "@paulmillr/jsbt": "0.6.5",
     "prettier": "3.6.2",
     "typescript": "6.0.2"
   },
   "scripts": {
+    "benchmark:size": "npx bismar@0.1.1 -s",
     "build": "tsc",
-    "build:release": "npx --no @paulmillr/jsbt bundle test/build",
-    "check": "npx --no @paulmillr/jsbt check package.json",
-    "bench": "cd test/benchmark; npm i; node index.ts",
+    "check": "jsbt-check",
+    "benchmark": "cd test/benchmark; npm i; node index.ts",
     "format": "prettier --write index.ts 'test/**/*.{js,ts}'",
-    "test": "node test/index.ts",
-    "test:bun": "bun test/index.ts",
-    "test:deno": "deno --allow-env --allow-read test/index.ts",
-    "test:node20": "cd test; npx tsc; node compiled/test/index.js"
+    "test": "node test/index.ts"
   },
   "engines": {
     "node": ">= 20.19.0"

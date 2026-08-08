@@ -1,6 +1,6 @@
 import * as ed25519 from '@noble/curves/ed25519.js';
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
-import { describe, should } from '@paulmillr/jsbt/test.js';
+import { describe, it } from '@paulmillr/jsbt/test.js';
 import { deepStrictEqual, notDeepStrictEqual, throws } from 'node:assert';
 import * as sr25519 from '../index.ts';
 
@@ -9,7 +9,7 @@ const RistrettoPoint = ed25519.ristretto255.Point;
 
 describe('sr25519', () => {
   describe('utils', () => {
-    should('strobe128', () => {
+    it('strobe128', () => {
       const s = new Strobe128('Conformance Test Protocol');
       let msg = new Uint8Array(1024).fill(99);
       s.metaAD('ms', false);
@@ -36,7 +36,7 @@ describe('sr25519', () => {
         ])
       );
     });
-    should('SigningContext', () => {
+    it('SigningContext', () => {
       // This is for merlin test
       const t = new SigningContext('SigningContext');
       t.label('substrate');
@@ -183,7 +183,7 @@ describe('sr25519', () => {
       deepStrictEqual(t.strobe.posBegin, 0);
       deepStrictEqual(t.strobe.curFlags, 7);
     });
-    should('validator constructors', () => {
+    it('validator constructors', () => {
       const s = new Strobe128('ctx');
       const t = new SigningContext('ctx');
       throws(() => s.AD(1 as any, false), TypeError);
@@ -193,7 +193,7 @@ describe('sr25519', () => {
       throws(() => sr25519.fromKeypair(new Uint8Array(95)), RangeError);
     });
   });
-  should('secretFromSeed', () => {
+  it('secretFromSeed', () => {
     const seed = hexToBytes('fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e');
     const secretKey = sr25519.secretFromSeed(seed);
     deepStrictEqual(
@@ -201,7 +201,7 @@ describe('sr25519', () => {
       '46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a'
     );
   });
-  should('sign', () => {
+  it('sign', () => {
     const input = hexToBytes('fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e');
     const secretKey = sr25519.secretFromSeed(input);
     const publicKey = sr25519.getPublicKey(secretKey);
@@ -214,7 +214,7 @@ describe('sr25519', () => {
       )
     );
   });
-  should('verify', () => {
+  it('verify', () => {
     const message = utf8ToBytes(
       'I hereby verify that I control 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'
     );
@@ -224,7 +224,7 @@ describe('sr25519', () => {
     );
     deepStrictEqual(sr25519.verify(message, signature, pub), true);
   });
-  should('verify (immutable)', () => {
+  it('verify (immutable)', () => {
     const message = utf8ToBytes(
       'I hereby verify that I control 5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'
     );
@@ -236,7 +236,7 @@ describe('sr25519', () => {
     deepStrictEqual(sr25519.verify(message, s1, pub), true);
     deepStrictEqual(s1, signature);
   });
-  should('verify (signed)', () => {
+  it('verify (signed)', () => {
     const input = hexToBytes('fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e');
     const secretKey = sr25519.secretFromSeed(input);
     const publicKey = sr25519.getPublicKey(secretKey);
@@ -247,7 +247,7 @@ describe('sr25519', () => {
     const signature2 = sr25519.sign(secretKey, message);
     deepStrictEqual(sr25519.verify(message, signature2, publicKey), true);
   });
-  should('verify (wrapped)', () => {
+  it('verify (wrapped)', () => {
     const message = utf8ToBytes('<Bytes>message to sign</Bytes>');
     const pub = hexToBytes('f84d048da2ddae2d9d8fd6763f469566e8817a26114f39408de15547f6d47805');
     const signature = hexToBytes(
@@ -255,7 +255,7 @@ describe('sr25519', () => {
     );
     deepStrictEqual(sr25519.verify(message, signature, pub), true);
   });
-  should('verify (wrapped, fail)', () => {
+  it('verify (wrapped, fail)', () => {
     const message = utf8ToBytes('message to sign');
     const pub = hexToBytes('f84d048da2ddae2d9d8fd6763f469566e8817a26114f39408de15547f6d47805');
     const signature = hexToBytes(
@@ -263,7 +263,7 @@ describe('sr25519', () => {
     );
     deepStrictEqual(sr25519.verify(message, signature, pub), false);
   });
-  should('getSharedSecret', () => {
+  it('getSharedSecret', () => {
     const selfSeed = hexToBytes('98b3d305d5a5eace562387e47e59badd4d77e3f72cabfb10a60f8a197059f0a8');
     const otherSeed = hexToBytes(
       '9732eea001851ff862d949a1699c9971f3a26edbede2ad7922cbbe9a0701f366'
@@ -279,7 +279,7 @@ describe('sr25519', () => {
     deepStrictEqual(sr25519.getSharedSecret(skOther, pubSelf), exp);
     deepStrictEqual(sr25519.getSharedSecret(skSelf, pubOther), exp);
   });
-  should('fromKeypair', () => {
+  it('fromKeypair', () => {
     const input = hexToBytes(
       '28b0ae221c6bb06856b287f60d7ea0d98552ea5a16db16956849aa371db3eb51fd190cce74df356432b410bd64682309d6dedb27c76845daf388557cbac3ca3446ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a'
     );
@@ -296,7 +296,7 @@ describe('sr25519', () => {
     );
   });
   describe('HDKD', () => {
-    should('secretSoft', () => {
+    it('secretSoft', () => {
       const cc = hexToBytes('0c666f6f00000000000000000000000000000000000000000000000000000000'); // foo
       const seed = hexToBytes('fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e');
       const masterSecret = sr25519.secretFromSeed(seed);
@@ -317,7 +317,7 @@ describe('sr25519', () => {
         ])
       );
     });
-    should('publicSoft', () => {
+    it('publicSoft', () => {
       const cc = hexToBytes('0c666f6f00000000000000000000000000000000000000000000000000000000'); // foo
       const pub = hexToBytes('46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a');
       const derived = sr25519.HDKD.publicSoft(pub, cc);
@@ -326,7 +326,7 @@ describe('sr25519', () => {
         '40b9675df90efa6069ff623b0fdfcf706cd47ca7452a5056c7ad58194d23440a'
       );
     });
-    should('secretHard', () => {
+    it('secretHard', () => {
       const cc = hexToBytes('14416c6963650000000000000000000000000000000000000000000000000000'); // Alice
       const seed = hexToBytes('fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e');
       const masterSecret = sr25519.secretFromSeed(seed);
@@ -352,13 +352,13 @@ describe('sr25519', () => {
     const ctx = utf8ToBytes('my VRF context');
     const msg = utf8ToBytes('this is a message');
     const extra = utf8ToBytes('extra param');
-    should('sign does not mutate secret key', () => {
+    it('sign does not mutate secret key', () => {
       const secretKey = Uint8Array.from(priv);
       const before = Uint8Array.from(secretKey);
       sr25519.vrf.sign(msg, secretKey, ctx, extra, new Uint8Array(32));
       deepStrictEqual(secretKey, before);
     });
-    should('basic', () => {
+    it('basic', () => {
       const sig = sr25519.vrf.sign(msg, priv, ctx, extra, new Uint8Array(32));
       deepStrictEqual(
         bytesToHex(sig.subarray(0, 32)),
@@ -377,7 +377,7 @@ describe('sr25519', () => {
       const pub = sr25519.getPublicKey(priv);
       deepStrictEqual(sr25519.vrf.verify(msg, sig, pub, ctx, extra), true);
     });
-    should('verify random', () => {
+    it('verify random', () => {
       const msg2 = utf8ToBytes('this is a message1');
       const out1 = sr25519.vrf.sign(msg, priv, ctx, extra);
       const out2 = sr25519.vrf.sign(msg, priv, ctx, extra);
@@ -394,13 +394,13 @@ describe('sr25519', () => {
       deepStrictEqual(sr25519.vrf.verify(msg, out3, pub, ctx, extra), false);
       deepStrictEqual(sr25519.vrf.verify(msg2, out3, pub, ctx, extra), true);
     });
-    should('no extra', () => {
+    it('no extra', () => {
       const out = sr25519.vrf.sign(msg, priv, ctx, Uint8Array.of());
       const pub = sr25519.getPublicKey(priv);
       deepStrictEqual(sr25519.vrf.verify(msg, out, pub, ctx, Uint8Array.of()), true);
       deepStrictEqual(sr25519.vrf.verify(msg, out, pub, ctx, extra), false);
     });
-    should('errors', () => {
+    it('errors', () => {
       const out = sr25519.vrf.sign(msg, priv, ctx, extra);
       const pub = sr25519.getPublicKey(priv);
       deepStrictEqual(sr25519.vrf.verify(msg, out, pub, ctx, extra), true);
@@ -450,4 +450,4 @@ describe('sr25519', () => {
   });
 });
 
-should.runWhen(import.meta.url);
+it.runWhen(import.meta.url);

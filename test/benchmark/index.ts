@@ -1,5 +1,5 @@
 import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
-import bench from '@paulmillr/jsbt/bench.js';
+import bench from '@paulmillr/jsbt/benchmark.js';
 import * as polka from '@polkadot/util-crypto';
 import { deepStrictEqual } from 'node:assert';
 import * as sr25519 from '../../index.ts';

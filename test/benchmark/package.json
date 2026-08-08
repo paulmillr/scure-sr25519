@@ -5,9 +5,6 @@
   "description": "benchmarks",
   "main": "index.js",
   "type": "module",
-  "scripts": {
-    "bench": "node index.js"
-  },
   "keywords": [],
   "author": "",
   "license": "MIT",

@@ -1,5 +1,9 @@
 # Changelog for scure-sr25519
 
+## 2.4.0 (2026-08-29)
+
+Upgrade noble-hashes and noble-curves to 2.4.0
+
 ## 2.3.0 (2026-08-08)
 
 Improve error messages and type checks. Upgrade noble-hashes and noble-curves to 2.3.0.

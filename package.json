@@ -1,6 +1,6 @@
 {
   "name": "@scure/sr25519",
-  "version": "2.4.0",
+  "version": "2.3.0",
   "description": "Audited & minimal implementation of sr25519 (polkadot) cryptography, with Merlin and Strobe",
   "files": [
     "index.js",
@@ -12,10 +12,10 @@
     "@noble/hashes": "2.4.0"
   },
   "devDependencies": {
-    "@paulmillr/jsbt": "0.7.1",
-    "bismar": "0.1.8",
+    "@paulmillr/jsbt": "0.7.2",
+    "bismar": "0.1.9",
     "prettier": "3.9.6",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "scripts": {
     "benchmark:size": "bismar -bsm",
